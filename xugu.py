@@ -5,11 +5,18 @@ import sqlite3
 import serial
 import time
 
+__version__ = "0.1.0"
 
 class InvalidValueError(Exception):
+    """
+    无效参数错误
+    """
     pass
 
 class InvalidTypeError(Exception):
+    """
+    无效类型错误
+    """
     pass
 
 class LED:
@@ -17,8 +24,15 @@ class LED:
     led灯对象
     """
     def __init__(self, pin_num, port="/dev/ttyACM0", debug=False):
+        """
+
+        :param pin_num: 数字针脚编号，范围0~13
+        :param port: 虚谷连接arduino的COM口，默认为"/dev/ttyACM0"
+        :param debug: 当为True的时候，会输出debug信息
+        """
         self.pin_num = pin_num
         self.board = PyMata(port, bluetooth=False, verbose=debug)
+        # 针脚设置为输出模式，数字信号类型
         self.board.set_pin_mode(pin_num, self.board.OUTPUT, self.board.DIGITAL)
 
     def light(self, value):
@@ -40,6 +54,7 @@ class LED:
         点亮灯的方法
         :return: 
         """
+        # 给针脚一个高电位，灯会点亮
         self.board.digital_write(self.pin_num, 1)
 
     def off(self):
@@ -47,6 +62,7 @@ class LED:
         熄灭灯的方法
         :return: 
         """
+        # 给针脚一个低电位，灯会熄灭
         self.board.digital_write(self.pin_num, 0)
 
 
@@ -61,14 +77,24 @@ class Pin:
 
     def __init__(self, pin_num, pin_model, port="/dev/ttyACM0",
                  debug=False):
+        """
+
+        :param pin_num: 针脚，已a开头的表示为模拟信号针脚，已d开头的表示为数字信号针脚
+        数字信号的针脚范围为d0~d13, 模拟信号的针脚范围为a0~a6
+        :param pin_model: 接受INPUT或者OUTPUT类型
+        :param port: 虚谷连接arduino的COM口，默认为"/dev/ttyACM0"
+        :param debug: 当为True的时候，会输出debug信息
+        """
         pin_num = pin_num.lower()
         if pin_num.startswith("d"):
+            # 如果针脚编号是d开头的，将针脚类型设置为DIGITAL
             pin_type = PyMata.DIGITAL
             try:
                 self.pin_num = int(pin_num[1:])
             except TypeError:
                 raise InvalidTypeError("invalid pin num")
         elif pin_num.startswith("a"):
+            # 如果针脚编号是a开头的，将针脚类型设置为ANALOG
             pin_type = PyMata.ANALOG
             try:
                 self.pin_num = int(pin_num[1:])
@@ -107,6 +133,9 @@ class ADC:
     模拟信号转换数字信号
     """
     def __init__(self, pin):
+        """
+        :param pin:  Pin对象
+        """
         self.pin = pin
 
     def read(self):
@@ -118,6 +147,10 @@ class DAC:
     数字信号转换模拟信号
     """
     def __init__(self, pin):
+        """
+
+        :param pin:  Pin对象
+        """
         self.pin = pin
 
     def write(self, value):
@@ -129,6 +162,12 @@ class Servo:
     舵机对象
     """
     def __init__(self, pin_num, port="/dev/ttyACM0", debug=False):
+        """
+
+        :param pin_num: 接入舵机的针脚编号，范围为0~13
+        :param port: 虚谷连接舵机的COM口，默认为"/dev/ttyACM0"
+        :param debug: 当为True的时候，会输出debug信息
+        """
         self.pin_num = pin_num
         self.board = PyMata(port, bluetooth=False, verbose=debug)
         self.board.servo_config(pin_num)
@@ -159,14 +198,33 @@ class I2C:
 
     def __init__(self, pin_type, clk_pin, data_pin, port="/dev/ttyACM0",
                  debug=False):
+        """
+
+        :param pin_type: DIGITAL 或者 ANALOG
+        :param clk_pin: 时钟总线接入的针脚
+        :param data_pin: 数据总线接入的针脚
+        :param port: 虚谷连接I2C设备的COM口，默认为"/dev/ttyACM0"
+        :param debug: 当为True的时候，会输出debug信息
+        """
         self.board = PyMata(port, bluetooth=False, verbose=debug)
+        # i2c设备初始化
         self.i2c = self.board.i2c_config(0, pin_type, clk_pin, data_pin)
 
     def read(self, addr=0x48, register=0, read_byte=2):
+        """
+
+        :param addr: i2c设备的一个地址
+        :param register: i2c设备某个地址的寄存器
+        :param read_byte: 一次读取的字节数量
+        :return:
+        """
+        # 向i2c的一个地址发送一个信号
         self.board.i2c_write(addr, PyMata.I2C_READ_CONTINUOUSLY)
         time.sleep(0.5)
+        # 读取这个地址的寄存器中缓存的数据
         self.board.i2c_read(addr, register, read_byte, PyMata.I2C_READ)
         time.sleep(0.5)
+        # 获取该地址中的数据
         data = self.board.i2c_get_read_data(addr)
         return data
 
@@ -174,7 +232,15 @@ class I2C:
         self.board.i2c_write(addr, addr, register, value)
 
 class SerialMgt:
+    """
+    封装串口对象
+    """
     def __init__(self, port='/dev/ttyS2', baudrate=115200):
+        """
+
+        :param port: 虚谷连接PC的串口号，默认是'/dev/ttyS2'
+        :param baudrate: 串口号速率，默认是115200
+        """
         self.ser = serial.Serial(port=port, baudrate=baudrate,
                                  bytesize=8, timeout=5)
 
@@ -218,12 +284,18 @@ def save_value(pin_num, value):
     :return: 
     """
     pin_num = pin_num.lower()
+    # 初始化sqlite3数据库连接，将数据文件存放到当前目录的example.db文件中
     conn = sqlite3.connect('example.db')
+    # 初始化游标
     c = conn.cursor()
+    # 初始化表，如果表不存在，就创建一张表
     c.execute('''CREATE TABLE IF NOT EXISTS pin_data
                       (pin_num TEXT PRIMARY KEY, data integer )''')
+    # 向表中插入一条数据
     c.execute("INSERT OR REPLACE INTO pin_data VALUES (?, ?)",[pin_num, value])
+    # 将数据写入到文件中
     conn.commit()
+    # 关闭连接
     conn.close()
 
 def read_value(pin_num):
@@ -235,8 +307,10 @@ def read_value(pin_num):
     pin_num = pin_num.lower()
     conn = sqlite3.connect("example.db")
     c = conn.cursor()
+    # 从表中读取针脚编号对应的数值
     c.execute("SELECT data from pin_data where pin_num=?", [pin_num])
     data = c.fetchall()
+    conn.close()
     if data:
         return data[0][0]
     else:
